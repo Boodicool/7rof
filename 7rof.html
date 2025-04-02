@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة الخلية السداسية - احتفال محسن</title>
+    <!-- 1. Re-add canvas-confetti library -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+        /* --- Dark Theme --- */
+        :root {
+            --dark-bg: #0d1b2a;
+            --container-bg: #1c2e4a;
+            --svg-bg: #152238;
+            --button-bg: #3a506b;
+            --button-hover-bg: #4b6584;
+            --text-light: #f0f8ff;
+            --highlight-yellow: #ffd700;
+            --green-color-val: #00DD00;
+            --orange-color-val: #FFA500;
+            --ivory-color-val: #f0f8ff;
+            --text-dark: #111827;
+        }
+
+        body {
+            font-family: Arial, sans-serif; background-color: var(--dark-bg); color: var(--text-light);
+            margin: 0; padding: 15px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box;
+        }
+
+        #game-container {
+            background-color: var(--container-bg); padding: 20px; border-radius: 10px; box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+            display: flex; flex-direction: column; align-items: center; width: 95%; max-width: 700px; position: relative; overflow: hidden; /* Helps contain confetti if needed */
+        }
+
+        #svg-container {
+            width: 100%; margin-bottom: 20px; border: 1px solid #555;
+            border-radius: 5px; overflow: hidden; background-color: var(--svg-bg);
+        }
+
+        #hex-canvas { display: block; width: 100%; height: auto; min-height: 150px; }
+
+        .hexagon {
+            stroke: #000000; /* Black outline */
+            stroke-width: 1; cursor: pointer; transition: fill 0.15s ease-in-out;
+        }
+
+        .hex-text {
+            font-size: 16px; font-weight: bold; fill: var(--text-dark);
+            pointer-events: none; text-anchor: middle; dominant-baseline: middle;
+            -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;
+        }
+
+        /* --- Button styles --- */
+        #button-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 100%; max-width: 500px; }
+        button { font-size: 14px; font-weight: bold; padding: 12px 15px; border: none; border-radius: 8px; background-color: var(--button-bg); color: var(--text-light); cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); text-align: center; transition: background-color 0.2s ease; }
+        button:hover { background-color: var(--button-hover-bg); }
+        button:active { background-color: #526a8b; }
+        #btn-celebrate { grid-column: 1 / -1; background-color: var(--highlight-yellow); color: #333; }
+        #btn-celebrate:hover { background-color: #ffeb3b; color: #000; }
+        .color-picker { visibility: hidden; width: 0; height: 0; padding: 0; border: none; position: absolute; }
+
+        /* 2. Restore CSS for celebration text */
+        #celebration-text {
+            position: absolute;
+            top: 40%; /* Adjust as needed */
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3em;
+            font-weight: bold;
+            color: var(--highlight-yellow);
+            text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.7);
+            z-index: 100; /* Above SVG */
+            display: none; /* Hidden initially */
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="svg-container">
+            <svg id="hex-canvas" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div id="celebration-text">مبرووووك!</div>
+        <div id="button-container">
+            <!-- Buttons -->
+            <button id="btn-pick-green">اختر اللون الأخضر</button>
+            <input type="color" id="color-picker-green" class="color-picker">
+            <button id="btn-pick-orange">اختر اللون البرتقالي</button>
+            <input type="color" id="color-picker-orange" class="color-picker">
+            <button id="btn-use-green">التلوين بالأخضر</button>
+            <button id="btn-use-orange">التلوين بالبرتقالي</button>
+            <button id="btn-use-white">تلوين بالأبيض</button>
+            <button id="btn-use-yellow">تلوين بالأصفر (Highlight)</button>
+            <button id="btn-random-letters">تغيير الأحرف عشوائيًّا</button>
+            <button id="btn-reset-colors">ارجاع جميع الحروف للابيض</button>
+            <button id="btn-celebrate">احتفال الفوز</button> <!-- Changed text back -->
+        </div>
+    </div>
+
+    <script>
+        // --- Constants, DOM Elements, State Variables ---
+        const ARABIC_LETTERS = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي'];
+        const ROWS = 7; const COLS = 7; const CELL_RADIUS = 30;
+        const svgCanvas = document.getElementById('hex-canvas');
+        const btnCelebrate = document.getElementById('btn-celebrate');
+        const celebrationTextElement = document.getElementById('celebration-text'); // Get element
+        const colorPickerGreen = document.getElementById('color-picker-green');
+        const colorPickerOrange = document.getElementById('color-picker-orange');
+        let cells = [];
+        let greenColor, orangeColor, ivoryColor, highlightColor, textDarkColor;
+        let activeColor;
+        let isCelebrating = false;
+        let celebrationTimeouts = []; // To manage timeouts
+
+        // --- Helper Functions ---
+        function hexPoints(cx, cy, r) { let pts = []; for (let i = 0; i < 6; i++) { const a = Math.PI / 180 * (60 * i - 30); pts.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`); } return pts.join(' '); }
+        function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+        // 3. Restore getRandomColor
+        function getRandomColor() {
+            const letters = '0123456789ABCDEF';
+            let color = '#';
+            for (let i = 0; i < 6; i++) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+
+        // 4. Restore launchConfetti
+        function launchConfetti(intensity = 1) {
+            try {
+                if (typeof confetti === 'function') { // Check if library is loaded
+                    confetti({ particleCount: 100 * intensity, spread: 70 * intensity, origin: { y: 0.6 } });
+                    if (intensity >= 1) {
+                        setTimeout(() => {
+                            confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 } });
+                            confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 } });
+                        }, 250);
+                    }
+                } else {
+                    console.warn("Confetti function not found.");
+                }
+            } catch (e) {
+                console.warn("Confetti failed:", e);
+            }
+        }
+
+        /** Reads color values from CSS variables */
+        function readCssColors() {
+             try {
+                const styles = getComputedStyle(document.documentElement);
+                greenColor = styles.getPropertyValue('--green-color-val').trim() || "#00DD00";
+                orangeColor = styles.getPropertyValue('--orange-color-val').trim() || "#FFA500";
+                ivoryColor = styles.getPropertyValue('--ivory-color-val').trim() || "#f0f8ff";
+                highlightColor = styles.getPropertyValue('--highlight-yellow').trim() || "#FFFF00";
+                textDarkColor = styles.getPropertyValue('--text-dark').trim() || "#111827";
+             } catch (e) {
+                 console.error("Failed to read CSS variables, using defaults:", e);
+                 greenColor = "#00DD00"; orangeColor = "#FFA500"; ivoryColor = "#f0f8ff"; highlightColor = "#FFFF00"; textDarkColor = "#111827";
+             }
+        }
+
+        // --- Core Game Logic ---
+        function drawHexGrid() {
+            svgCanvas.innerHTML = ''; cells = [];
+            if (!greenColor || !orangeColor || !ivoryColor) { readCssColors(); }
+            if (!greenColor || !orangeColor || !ivoryColor) { alert("فشل قراءة الألوان."); return; }
+            const hexRadius = CELL_RADIUS; const hexWidth = Math.sqrt(3) * hexRadius; const hexHeight = 2 * hexRadius; const hSpacing = hexWidth; const vSpacing = hexHeight * 0.75; const padding = 10; const startX = padding + hexWidth / 2; const startY = padding + hexHeight / 2; const totalWidth = (COLS * hSpacing) + (hSpacing / 2) + padding * 2; const totalHeight = ((ROWS - 1) * vSpacing) + hexHeight + padding * 2; svgCanvas.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
+            for (let row = 0; row < ROWS; row++) {
+                const rowCells = [];
+                for (let col = 0; col < COLS; col++) {
+                    let cx = startX + col * hSpacing; const cy = startY + row * vSpacing; if (row % 2 !== 0) cx += hSpacing / 2; if (isNaN(cx) || isNaN(cy)) continue;
+                    const points = hexPoints(cx, cy, hexRadius);
+                    let initialFill = ivoryColor; if (row === 0 || row === ROWS - 1) initialFill = greenColor; else if (col === 0 || col === COLS - 1) initialFill = orangeColor; if ((row === 0 || row === ROWS - 1) && (col === 0 || col === COLS - 1)) initialFill = greenColor;
+                    try {
+                        const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon'); polygon.setAttribute('points', points); polygon.setAttribute('fill', initialFill); polygon.setAttribute('class', 'hexagon'); polygon.dataset.row = row; polygon.dataset.col = col; svgCanvas.appendChild(polygon);
+                        let textElement = null;
+                        if (row > 0 && row < ROWS - 1 && col > 0 && col < COLS - 1) {
+                            textElement = document.createElementNS('http://www.w3.org/2000/svg', 'text'); textElement.setAttribute('x', cx); textElement.setAttribute('y', cy); textElement.setAttribute('class', 'hex-text'); textElement.style.fontSize = `${Math.max(10, hexRadius * 0.55)}px`; textElement.textContent = '?'; svgCanvas.appendChild(textElement);
+                        }
+                        // Store reference to original color for celebration end
+                        rowCells.push({ polygon, textElement, letter: '', fillColor: initialFill, originalColor: initialFill, flashOriginalColor: initialFill });
+                    } catch (e) { /* ... error handling ... */ }
+                }
+                cells.push(rowCells);
+            }
+        }
+
+        // --- Other Functions (randomizeLetters, resetInnerCellColors, setActiveColor, handleCanvasClick, updateColor) ---
+        // --- Added isCelebrating checks back ---
+        function randomizeLetters() {
+            if (isCelebrating || cells.length === 0) return; // Check celebrating flag
+            const innerSize = (ROWS - 2) * (COLS - 2); if (ARABIC_LETTERS.length < innerSize) return; const uniqueLetters = shuffle([...ARABIC_LETTERS]).slice(0, innerSize); let letterIndex = 0; for (let row = 1; row < ROWS - 1; row++) { for (let col = 1; col < COLS - 1; col++) { if (cells[row] && cells[row][col] && cells[row][col].textElement) { const cell = cells[row][col]; const letter = uniqueLetters[letterIndex++]; cell.letter = letter; cell.textElement.textContent = letter; } } }
+        }
+        function resetInnerCellColors() {
+            if (isCelebrating || cells.length === 0) return; // Check celebrating flag
+            for (let row = 1; row < ROWS - 1; row++) { for (let col = 1; col < COLS - 1; col++) { if (cells[row] && cells[row][col] && cells[row][col].polygon) { const cell = cells[row][col]; cell.fillColor = ivoryColor; cell.originalColor = ivoryColor; cell.polygon.setAttribute('fill', ivoryColor); } } }
+        }
+        function setActiveColor(colorName) { if (!greenColor || !orangeColor || !ivoryColor || !highlightColor) readCssColors(); switch (colorName) { case 'green': activeColor = greenColor; break; case 'orange': activeColor = orangeColor; break; case 'white': activeColor = ivoryColor; break; case 'yellow': activeColor = highlightColor; break; default: activeColor = greenColor; } }
+        function handleCanvasClick(event) {
+            if (isCelebrating) return; // Check celebrating flag
+            if (event.target.tagName === 'polygon') { const polygon = event.target; const row = parseInt(polygon.dataset.row); const col = parseInt(polygon.dataset.col); if(!isNaN(row) && !isNaN(col) && cells[row] && cells[row][col]){ const cell = cells[row][col]; cell.fillColor = activeColor; cell.originalColor = activeColor; polygon.setAttribute('fill', activeColor); } }
+        }
+        function updateGreenColor(newColor) {
+            if (isCelebrating) return; // Check celebrating flag
+            const oldGreen = greenColor; greenColor = newColor; if (activeColor === oldGreen) setActiveColor('green'); cells.flat().forEach(cell => { if (!cell) return; const r=parseInt(cell.polygon.dataset.row), c=parseInt(cell.polygon.dataset.col); if (r === 0 || r === ROWS - 1 || ((c === 0 || c === COLS -1) && (r === 0 || r === ROWS -1))) { if (cell.fillColor === oldGreen || cell.originalColor === oldGreen) { cell.fillColor = greenColor; cell.originalColor = greenColor; cell.polygon.setAttribute('fill', greenColor); } } }); updateCornerColors();
+        }
+        function updateOrangeColor(newColor) {
+             if (isCelebrating) return; // Check celebrating flag
+             const oldOrange = orangeColor; orangeColor = newColor; if (activeColor === oldOrange) setActiveColor('orange'); cells.flat().forEach(cell => { if (!cell) return; const r=parseInt(cell.polygon.dataset.row), c=parseInt(cell.polygon.dataset.col); if ((c === 0 || c === COLS - 1) && (r > 0 && r < ROWS - 1)) { if(cell.fillColor === oldOrange || cell.originalColor === oldOrange) { cell.fillColor = orangeColor; cell.originalColor = orangeColor; cell.polygon.setAttribute('fill', orangeColor); } } }); updateCornerColors();
+        }
+        function updateCornerColors() { const corners = [ [0, 0], [0, COLS - 1], [ROWS - 1, 0], [ROWS - 1, COLS - 1] ]; corners.forEach(([r, c]) => { if (cells[r] && cells[r][c]) { const cell = cells[r][c]; cell.fillColor = greenColor; cell.originalColor = greenColor; cell.polygon.setAttribute('fill', greenColor); } }); }
+
+
+        // --- Advanced Celebration Functions ---
+        let animationStep = 0;
+        const MAX_ANIMATION_STEPS = 15; // Number of random color steps
+        const ANIMATION_DELAY = 150; // ms between steps
+
+        // 5. Restore animateCells
+        function animateCells() {
+            if (animationStep >= MAX_ANIMATION_STEPS) {
+                // Animation finished, restore original colors
+                cells.flat().forEach(cell => {
+                    if (cell && cell.polygon) {
+                         // Restore the color saved before animation started
+                         cell.polygon.setAttribute('fill', cell.flashOriginalColor || cell.originalColor);
+                         cell.fillColor = cell.flashOriginalColor || cell.originalColor; // Update state too
+                    }
+                 });
+                // Hide celebration text
+                celebrationTextElement.style.opacity = '0';
+                const fadeOutTimeout = setTimeout(() => {
+                    celebrationTextElement.style.display = 'none';
+                }, 500); // Wait for fade out transition
+                celebrationTimeouts.push(fadeOutTimeout);
+
+                isCelebrating = false; // Allow interactions again
+                return;
+            }
+
+            // Change color of each cell randomly
+            cells.flat().forEach(cell => {
+                if (cell && cell.polygon) { // Check if cell and polygon exist
+                     const randomColor = getRandomColor();
+                     cell.polygon.setAttribute('fill', randomColor);
+                     // Optional: Update fillColor state if needed, though originalColor is more important here
+                     // cell.fillColor = randomColor;
+                }
+            });
+
+            // Launch confetti periodically during animation
+            if(animationStep % 3 === 0 && animationStep > 0) {
+                 launchConfetti(0.6); // Slightly less intense bursts
+             }
+
+            animationStep++;
+            const timeoutId = setTimeout(animateCells, ANIMATION_DELAY);
+            celebrationTimeouts.push(timeoutId); // Store timeout ID to clear if needed
+        }
+
+        // 6. Restore full celebrate function
+        function celebrate() {
+            if (isCelebrating) return; // Prevent multiple celebrations
+            isCelebrating = true;
+            animationStep = 0;
+            celebrationTimeouts.forEach(clearTimeout); // Clear any previous timeouts
+            celebrationTimeouts = [];
+
+            // Store current color before animation starts
+            cells.flat().forEach(cell => {
+                if (cell && cell.polygon) {
+                    cell.flashOriginalColor = cell.polygon.getAttribute('fill');
+                }
+            });
+
+            // Show celebration text
+            celebrationTextElement.style.display = 'block';
+            setTimeout(() => { celebrationTextElement.style.opacity = '1'; }, 50);
+
+            // Start confetti
+            launchConfetti(); // Initial burst
+
+            // Start random color animation
+            animateCells();
+        }
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+             try {
+                svgCanvas.addEventListener('click', handleCanvasClick);
+                document.getElementById('btn-pick-green').addEventListener('click', () => colorPickerGreen.click());
+                colorPickerGreen.addEventListener('input', (e) => updateGreenColor(e.target.value));
+                document.getElementById('btn-pick-orange').addEventListener('click', () => colorPickerOrange.click());
+                colorPickerOrange.addEventListener('input', (e) => updateOrangeColor(e.target.value));
+                document.getElementById('btn-use-green').addEventListener('click', () => setActiveColor('green'));
+                document.getElementById('btn-use-orange').addEventListener('click', () => setActiveColor('orange'));
+                document.getElementById('btn-use-white').addEventListener('click', () => setActiveColor('white'));
+                document.getElementById('btn-use-yellow').addEventListener('click', () => setActiveColor('yellow'));
+                document.getElementById('btn-random-letters').addEventListener('click', randomizeLetters);
+                document.getElementById('btn-reset-colors').addEventListener('click', resetInnerCellColors);
+                btnCelebrate.addEventListener('click', celebrate); // Connect to the full celebrate function
+            } catch(e) { /* ... error handling ... */ }
+        }
+
+        // --- Initial Setup (DOMContentLoaded) ---
+        document.addEventListener('DOMContentLoaded', () => {
+             try {
+                readCssColors();
+                colorPickerGreen.value = greenColor; colorPickerOrange.value = orangeColor;
+                setActiveColor('green');
+                drawHexGrid();
+                if (svgCanvas.children.length > 0) { randomizeLetters(); }
+                else { console.warn("Grid seems empty after drawing, skipping randomizeLetters."); }
+                updateCornerColors();
+                setupEventListeners();
+            } catch (error) { /* ... error handling ... */ }
+        });
+
+    </script>
+</body>
+</html>
