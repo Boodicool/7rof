@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>خلية الأحرف</title> <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <style>
+      @font-face {
+        font-family: 'LucideIcons';
+        src: url(https://cdn.jsdelivr.net/npm/lucide-static@latest/font/Lucide.ttf) format('truetype');
+      }
+      .lucide {
+        font-family: 'LucideIcons'; font-size: 1.1em; line-height: 1; vertical-align: middle; margin-inline-start: 0.3em;
+      }
+    </style>
+
+    <style>
+        /* --- Custom Styles & Overrides --- */
+        :root {
+            /* Define base colors for JS access */
+            --green-color-val: #22c55e;
+            --orange-color-val: #f97316;
+            --ivory-color-val: #f8fafc;
+            --highlight-yellow: #eab308;
+            --text-dark: #1e293b;
+            --cell-stroke-purple: #7e22ce;
+            /* Gradient colors */
+            --grad-blue: #3b82f6;
+            --grad-purple: #a855f7;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+        }
+
+        /* Base hexagon style - applied ONLY to inner cells now */
+        .hexagon {
+            stroke: var(--cell-stroke-purple);
+            stroke-width: 2.5;
+            /* fill is set by JS */
+            cursor: pointer;
+            transition: fill 0.15s ease-in-out, transform 0.1s ease-out, filter 0.3s ease-in-out;
+        }
+        .hexagon:hover {
+            transform: scale(1.03);
+            transform-origin: center center;
+            filter: brightness(1.1);
+        }
+
+        /* Style for the text inside hexagons */
+        .hex-text {
+            /* Font size is now calculated dynamically based on larger radius */
+            font-weight: bold; fill: var(--text-dark);
+            pointer-events: none; text-anchor: middle; dominant-baseline: middle;
+            -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;
+            transition: fill 0.15s ease-in-out;
+        }
+
+        /* Style for the hidden color input */
+        .color-picker {
+            visibility: hidden; width: 0; height: 0; padding: 0; border: none; position: absolute; left: -9999px;
+        }
+
+        /* Style for the celebration text */
+        #celebration-text { display: none; opacity: 0; transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out; transform: translate(-50%, -50%) scale(0.8); }
+        #celebration-text.show { display: block; opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+        /* Glowing Yellow Animation */
+        @keyframes glow { 0%, 100% { filter: brightness(1.0); } 50% { filter: brightness(1.4); } }
+        /* Apply glow only to inner cells that are yellow */
+        .hexagon.glowing-yellow { animation: glow 1.5s ease-in-out infinite; } /* Simplified selector */
+
+        /* Animated Gradient Text */
+        @keyframes gradient-animation {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .animated-gradient-text {
+            background: linear-gradient(90deg, var(--grad-blue), var(--grad-purple), var(--grad-blue));
+            background-size: 200% auto;
+            color: transparent;
+            -webkit-background-clip: text;
+            background-clip: text;
+            animation: gradient-animation 6s ease-in-out infinite;
+        }
+
+    </style>
+</head>
+ <body class="text-slate-100 flex flex-col items-center justify-between min-h-screen p-4">
+
+    <header class="w-full max-w-3xl mb-6 md:mb-8">
+        <h1 id="page-header" class="text-4xl md:text-5xl font-black text-center animated-gradient-text py-1">
+            خلية الأحرف
+        </h1>
+    </header>
+
+    <div id="game-container" class="bg-slate-800/80 backdrop-blur-sm p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col items-center gap-6 border border-slate-700">
+        <div id="svg-container" class="w-full border border-slate-600 rounded-lg overflow-hidden bg-slate-700/50 shadow-inner">
+            <svg id="hex-canvas" preserveAspectRatio="xMidYMid meet" class="block w-full h-auto" style="background-color: transparent;"></svg>
+        </div>
+        <div id="celebration-text" class="absolute top-1/2 left-1/2 z-50 text-5xl md:text-7xl font-bold text-yellow-400" style="text-shadow: 2px 2px 6px rgba(0,0,0,0.7);">
+            مبرووووك!
+        </div>
+        <div id="button-container" class="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full max-w-xl">
+             <button id="btn-pick-green" class="col-span-1 flex items-center justify-center text-sm font-semibold py-2.5 px-4 rounded-lg bg-gradient-to-br from-green-500 to-green-600 text-white shadow-md hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-green-400 transition duration-150 ease-in-out transform hover:scale-105 active:scale-95">
+                اختر الأخضر<span class="lucide">&#xea91;</span> </button>
+            <input type="color" id="color-picker-green" class="color-picker">
+            <button id="btn-pick-orange" class="col-span-1 flex items-center justify-center text-sm font-semibold py-2.5 px-4 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-md hover:from-orange-600 hover:to-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-orange-400 transition duration-150 ease-in-out transform hover:scale-105 active:scale-95">
+                اختر البرتقالي<span class="lucide">&#xea91;</span> </button>
+            <input type="color" id="color-picker-orange" class="color-picker">
+            <button id="btn-use-green" class="col-span-1 text-sm font-semibold py-2.5 px-4 rounded-lg bg-slate-600 hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-green-400 transition duration-150 ease-in-out transform hover:scale-105 active:scale-95">
+                تلوين بالأخضر
+            </button>
+            <button id="btn-use-orange" class="col-span-1 text-sm font-semibold py-2.5 px-4 rounded-lg bg-slate-600 hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-orange-400 transition duration-150 ease-in-out transform hover:scale-105 active:scale-95">
+                تلوين بالبرتقالي
+            </button>
+            <button id="btn-use-white" class="col-span-1 text-sm font-semibold py-2.5 px-4 rounded-lg bg-slate-600 hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-slate-400 transition duration-150 ease-in-out transform hover:scale-105 active:scale-95">
+                تلوين بالأبيض
+            </button>
+            <button id="btn-use-yellow" class="col-span-1 text-sm font-semibold py-2.5 px-4 rounded-lg bg-slate-600 hover:bg-slate-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-yellow-400 transition duration-150 ease-in-out transform hover:scale-105 active:scale-95">
+                تلوين بالأصفر ✨
+            </button>
+            <button id="btn-random-letters" class="col-span-1 text-sm font-semibold py-2.5 px-4 rounded-lg bg-sky-600 hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-sky-400 transition duration-150 ease-in-out transform hover:scale-105 active:scale-95">
+                تغيير الأحرف
+            </button>
+            <button id="btn-reset-colors" class="col-span-1 text-sm font-semibold py-2.5 px-4 rounded-lg bg-rose-600 hover:bg-rose-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-rose-400 transition duration-150 ease-in-out transform hover:scale-105 active:scale-95">
+                إعادة الألوان
+            </button>
+            <button id="btn-celebrate" class="col-span-full sm:col-span-1 text-base font-bold py-3 px-5 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-500 text-slate-900 shadow-lg hover:from-yellow-500 hover:to-amber-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-yellow-300 transition duration-150 ease-in-out transform hover:scale-105 active:scale-95">
+                احتفال! 🎉
+            </button>
+        </div>
+    </div>
+
+    <footer class="w-full max-w-3xl mt-6 md:mt-8 text-left pb-4"> <p id="page-footer" class="text-sm opacity-75 animated-gradient-text inline-block"> Made by : BoodiCool
+        </p>
+    </footer>
+
+
+    <script>
+        // --- Constants, DOM Elements, State Variables ---
+        const ARABIC_LETTERS = ['ا','ب','ت','ث','ج','ح','خ','د','ذ','ر','ز','س','ش','ص','ض','ط','ظ','ع','غ','ف','ق','ك','ل','م','ن','ه','و','ي'];
+        const ROWS = 7; const COLS = 7; const CELL_RADIUS = 45; // Keep large radius
+
+        const svgCanvas = document.getElementById('hex-canvas');
+        const btnCelebrate = document.getElementById('btn-celebrate');
+        const celebrationTextElement = document.getElementById('celebration-text');
+        const colorPickerGreen = document.getElementById('color-picker-green');
+        const colorPickerOrange = document.getElementById('color-picker-orange');
+
+        let cells = []; // Stores data for INNER cells only
+        let greenColor, orangeColor, ivoryColor, highlightColor, textDarkColor;
+        let activeColor;
+        let isCelebrating = false;
+        let celebrationTimeouts = [];
+
+        // Object to store references to background rectangles
+        const bgRects = { top: null, bottom: null, left: null, right: null };
+
+        // --- Helper Functions ---
+        function hexPoints(cx, cy, r) { let pts = []; for (let i = 0; i < 6; i++) { const a = Math.PI / 180 * (60 * i - 30); pts.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`); } return pts.join(' '); }
+        function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+        function getRandomColor() { const twColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f87171', '#fb923c', '#facc15', '#4ade80', '#22d3ee', '#60a5fa', '#a78bfa', '#f472b6']; return twColors[Math.floor(Math.random() * twColors.length)]; }
+        function launchConfetti(intensity = 1) { try { if (typeof confetti === 'function') { confetti({ particleCount: Math.floor(120 * intensity), spread: Math.floor(80 * intensity), origin: { y: 0.6 }, colors: ['#eab308', '#facc15', '#fef08a', '#ffffff', '#f97316', '#fb923c'] }); if (intensity >= 0.8) { setTimeout(() => { confetti({ particleCount: Math.floor(60 * intensity), angle: 60, spread: 65, origin: { x: 0 }, colors: ['#22c55e', '#4ade80', '#ffffff'] }); confetti({ particleCount: Math.floor(60 * intensity), angle: 120, spread: 65, origin: { x: 1 }, colors: ['#3b82f6', '#60a5fa', '#ffffff'] }); }, 250); } } else { console.warn("Confetti function not found."); } } catch (e) { console.error("Confetti failed:", e); } }
+        function readCssColors() { try { const styles = getComputedStyle(document.documentElement); greenColor = styles.getPropertyValue('--green-color-val').trim() || "#22c55e"; orangeColor = styles.getPropertyValue('--orange-color-val').trim() || "#f97316"; ivoryColor = styles.getPropertyValue('--ivory-color-val').trim() || "#f8fafc"; highlightColor = styles.getPropertyValue('--highlight-yellow').trim() || "#eab308"; textDarkColor = styles.getPropertyValue('--text-dark').trim() || "#1e293b"; colorPickerGreen.value = greenColor; colorPickerOrange.value = orangeColor; } catch (e) { console.error("Failed to read CSS variables, using fallback defaults:", e); greenColor = "#22c55e"; orangeColor = "#f97316"; ivoryColor = "#f8fafc"; highlightColor = "#eab308"; textDarkColor = "#1e293b"; } }
+
+        // --- Core Game Logic ---
+        function drawHexGrid() {
+            svgCanvas.innerHTML = '';
+            cells = [];
+            bgRects.top = null; bgRects.bottom = null; bgRects.left = null; bgRects.right = null;
+            if (!greenColor) readCssColors();
+
+            const hexRadius = CELL_RADIUS;
+            const hexWidth = Math.sqrt(3) * hexRadius;
+            const hexHeight = 2 * hexRadius;
+            const hSpacing = hexWidth;
+            const vSpacing = hexHeight * 0.75;
+            const padding = 5;
+            const startX = padding + hexWidth / 2;
+            const startY = padding + hexHeight / 2;
+
+            const totalWidth = padding * 2 + (COLS * hSpacing) + (hSpacing / 2);
+            const totalHeight = padding * 2 + ((ROWS - 1) * vSpacing) + hexHeight;
+            svgCanvas.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
+
+            // --- Draw background border rectangles with MAXIMUM EXPANSION ---
+            const vertOverlapFactor = 0.7;
+            const horizOverlapFactor = 2.5;
+
+            const topBoundary = startY + vertOverlapFactor * vSpacing;
+            const bottomBoundary = startY + (ROWS - 1 - vertOverlapFactor) * vSpacing;
+            const leftBoundary = startX + horizOverlapFactor * hSpacing - hexWidth/2;
+            const rightBoundary = startX + (COLS - 1 - horizOverlapFactor) * hSpacing + hexWidth/2;
+
+            // Top Green Rectangle
+            const topRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            topRect.setAttribute('x', 0); topRect.setAttribute('y', 0);
+            topRect.setAttribute('width', totalWidth); topRect.setAttribute('height', Math.max(0, topBoundary));
+            topRect.setAttribute('fill', greenColor); topRect.setAttribute('id', 'bg-rect-top');
+            svgCanvas.appendChild(topRect);
+            bgRects.top = topRect;
+
+            // Bottom Green Rectangle
+            const bottomRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            bottomRect.setAttribute('x', 0); bottomRect.setAttribute('y', bottomBoundary);
+            bottomRect.setAttribute('width', totalWidth); bottomRect.setAttribute('height', Math.max(0, totalHeight - bottomBoundary));
+            bottomRect.setAttribute('fill', greenColor); bottomRect.setAttribute('id', 'bg-rect-bottom');
+            svgCanvas.appendChild(bottomRect);
+            bgRects.bottom = bottomRect;
+
+             // Left Orange Rectangle
+            const leftRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            leftRect.setAttribute('x', 0); leftRect.setAttribute('y', 0);
+            leftRect.setAttribute('width', Math.max(0, leftBoundary)); leftRect.setAttribute('height', totalHeight);
+            leftRect.setAttribute('fill', orangeColor); leftRect.setAttribute('id', 'bg-rect-left');
+            svgCanvas.appendChild(leftRect);
+            bgRects.left = leftRect;
+
+            // Right Orange Rectangle
+            const rightRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+             rightRect.setAttribute('x', rightBoundary); rightRect.setAttribute('y', 0);
+            rightRect.setAttribute('width', Math.max(0, totalWidth - rightBoundary)); rightRect.setAttribute('height', totalHeight);
+            rightRect.setAttribute('fill', orangeColor); rightRect.setAttribute('id', 'bg-rect-right');
+            svgCanvas.appendChild(rightRect);
+            bgRects.right = rightRect;
+
+            /* Re-append top/bottom green rects to ensure they are visually on top of orange sides at corners */
+            svgCanvas.appendChild(topRect);
+            svgCanvas.appendChild(bottomRect);
+            // --- End of background rectangles ---
+
+
+            // Loop to draw ONLY INNER cells on top of background rectangles
+             for (let row = 1; row < ROWS - 1; row++) {
+                 const rowCells = [];
+                 rowCells.push(...Array(1).fill(null)); // Null for col 0
+                 for (let col = 1; col < COLS - 1; col++) {
+                     let cx = startX + col * hSpacing;
+                     const cy = startY + row * vSpacing;
+                     if (row % 2 !== 0) cx += hSpacing / 2;
+                     if (isNaN(cx) || isNaN(cy)) { rowCells.push(null); continue; };
+                     try {
+                         const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                         polygon.setAttribute('points', hexPoints(cx, cy, hexRadius));
+                         polygon.setAttribute('class', 'hexagon');
+                         polygon.setAttribute('fill', ivoryColor); // Set initial fill using JS
+                         polygon.dataset.row = row; polygon.dataset.col = col;
+                         svgCanvas.appendChild(polygon);
+                         const textElement = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                         textElement.setAttribute('x', cx); textElement.setAttribute('y', cy + 2); textElement.setAttribute('class', 'hex-text');
+                         textElement.style.fontSize = `${Math.max(12, hexRadius * 0.5)}px`;
+                         textElement.textContent = '?';
+                         svgCanvas.appendChild(textElement);
+                         const cellData = { polygon, textElement, letter: '', fillColor: ivoryColor, originalColor: ivoryColor, flashOriginalColor: ivoryColor };
+                         rowCells.push(cellData);
+                     } catch (e) { console.error(`Error creating SVG element at row ${row}, col ${col}:`, e); rowCells.push(null); }
+                 }
+                  rowCells.push(...Array(1).fill(null)); // Null for col COLS-1
+                 if (row === 1) { cells.push(Array(COLS).fill(null)); } // Row 0
+                 cells.push(rowCells);
+                 if (row === ROWS - 2) { cells.push(Array(COLS).fill(null)); } // Row ROWS-1
+             }
+        }
+
+
+        function randomizeLetters() {
+            if (isCelebrating || cells.length === 0) return;
+            const innerCellsData = cells.flat().filter(cell => cell !== null);
+            if (innerCellsData.length === 0) return;
+            let availableLetters = [...ARABIC_LETTERS]; while (availableLetters.length < innerCellsData.length) { availableLetters = availableLetters.concat(ARABIC_LETTERS); }
+            const lettersToUse = shuffle(availableLetters).slice(0, innerCellsData.length);
+            innerCellsData.forEach((cell, index) => { const letter = lettersToUse[index]; cell.letter = letter; if (cell.textElement) { cell.textElement.textContent = letter; } });
+        }
+
+        function resetInnerCellColors() {
+            if (isCelebrating || cells.length === 0) return;
+            const innerCellsData = cells.flat().filter(cell => cell !== null);
+             innerCellsData.forEach(cell => {
+                 cell.fillColor = ivoryColor; cell.originalColor = ivoryColor;
+                 cell.polygon.setAttribute('fill', ivoryColor); // Reset fill using JS
+                 cell.polygon.classList.remove('glowing-yellow');
+             });
+        }
+
+
+        function setActiveColor(colorName) {
+            if (!greenColor) readCssColors();
+            switch (colorName) {
+                case 'green': activeColor = greenColor; break;
+                case 'orange': activeColor = orangeColor; break;
+                case 'white': activeColor = ivoryColor; break;
+                case 'yellow': activeColor = highlightColor; break;
+                default: activeColor = ivoryColor;
+            }
+        }
+
+        function handleCanvasClick(event) {
+            if (isCelebrating) return;
+            if (event.target.tagName === 'polygon' && event.target.classList.contains('hexagon')) {
+                const polygon = event.target;
+                const row = parseInt(polygon.dataset.row);
+                const col = parseInt(polygon.dataset.col);
+                 if (!isNaN(row) && !isNaN(col) && cells[row]?.[col]) { // Check if it's an inner cell
+                    const cell = cells[row][col];
+                    cell.fillColor = activeColor; cell.originalColor = activeColor;
+                    polygon.setAttribute('fill', activeColor); // Set fill directly using JS
+                    if (activeColor === highlightColor) {
+                         polygon.classList.add('glowing-yellow');
+                     } else {
+                         polygon.classList.remove('glowing-yellow');
+                     }
+                }
+            }
+        }
+
+        // Updates background rects using stored references
+        function updateGreenColor(newColor) {
+            if (isCelebrating) return;
+            const oldGreen = greenColor; greenColor = newColor;
+            if (activeColor === oldGreen) setActiveColor('green');
+            if (bgRects.top) bgRects.top.setAttribute('fill', greenColor);
+            if (bgRects.bottom) bgRects.bottom.setAttribute('fill', greenColor);
+        }
+
+        function updateOrangeColor(newColor) {
+             if (isCelebrating) return;
+             const oldOrange = orangeColor; orangeColor = newColor;
+             if (activeColor === oldOrange) setActiveColor('orange');
+             if (bgRects.left) bgRects.left.setAttribute('fill', orangeColor);
+             if (bgRects.right) bgRects.right.setAttribute('fill', orangeColor);
+        }
+
+        // --- Advanced Celebration Functions ---
+        let animationStep = 0;
+        const MAX_ANIMATION_STEPS = 18; const ANIMATION_DELAY = 120;
+
+        // animateCells includes background rects
+        function animateCells() {
+            const flatInnerCells = cells.flat().filter(cell => cell !== null);
+
+            // Base case: Stop animation
+            if (animationStep >= MAX_ANIMATION_STEPS) {
+                // Restore inner cells
+                flatInnerCells.forEach(cell => {
+                    if (cell?.polygon) {
+                         const restoreColor = cell.flashOriginalColor || cell.originalColor;
+                         cell.polygon.setAttribute('fill', restoreColor); cell.fillColor = restoreColor;
+                         if (restoreColor === highlightColor) { cell.polygon.classList.add('glowing-yellow'); }
+                         else { cell.polygon.classList.remove('glowing-yellow'); }
+                    }
+                 });
+                 // Restore background rectangle colors
+                 if (bgRects.top) bgRects.top.setAttribute('fill', greenColor);
+                 if (bgRects.bottom) bgRects.bottom.setAttribute('fill', greenColor);
+                 if (bgRects.left) bgRects.left.setAttribute('fill', orangeColor);
+                 if (bgRects.right) bgRects.right.setAttribute('fill', orangeColor);
+
+                celebrationTextElement.classList.remove('show');
+                const fadeOutTimeout = setTimeout(() => {}, 500); celebrationTimeouts.push(fadeOutTimeout);
+                isCelebrating = false; return;
+            }
+
+            // Animation step: Change color of inner cells randomly
+            flatInnerCells.forEach(cell => {
+                 if (cell?.polygon) {
+                     cell.polygon.classList.remove('glowing-yellow');
+                     const randomColor = getRandomColor(); cell.polygon.setAttribute('fill', randomColor);
+                 }
+             });
+
+             // Change color of background rectangles randomly
+             const randomBorderColor1 = getRandomColor();
+             const randomBorderColor2 = getRandomColor();
+             const randomBorderColor3 = getRandomColor();
+             const randomBorderColor4 = getRandomColor();
+             if (bgRects.top) bgRects.top.setAttribute('fill', randomBorderColor1);
+             if (bgRects.bottom) bgRects.bottom.setAttribute('fill', randomBorderColor2);
+             if (bgRects.left) bgRects.left.setAttribute('fill', randomBorderColor3);
+             if (bgRects.right) bgRects.right.setAttribute('fill', randomBorderColor4);
+
+
+            if(animationStep % 4 === 0 && animationStep > 0) { launchConfetti(0.7); }
+            animationStep++; const timeoutId = setTimeout(animateCells, ANIMATION_DELAY); celebrationTimeouts.push(timeoutId);
+        }
+
+        function celebrate() {
+            if (isCelebrating) return; isCelebrating = true; animationStep = 0;
+            celebrationTimeouts.forEach(clearTimeout); celebrationTimeouts = [];
+            const flatInnerCells = cells.flat().filter(cell => cell !== null);
+            flatInnerCells.forEach(cell => { if (cell?.polygon) { cell.flashOriginalColor = cell.polygon.getAttribute('fill'); cell.polygon.classList.remove('glowing-yellow'); } });
+            celebrationTextElement.style.display = 'block'; requestAnimationFrame(() => { setTimeout(() => { celebrationTextElement.classList.add('show'); }, 20); });
+            launchConfetti(1.2); animateCells();
+        }
+
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+             try {
+                svgCanvas.addEventListener('click', handleCanvasClick);
+                document.getElementById('btn-pick-green').addEventListener('click', () => colorPickerGreen.click());
+                colorPickerGreen.addEventListener('input', (e) => updateGreenColor(e.target.value)); // Updates variable AND border rects
+                document.getElementById('btn-pick-orange').addEventListener('click', () => colorPickerOrange.click());
+                colorPickerOrange.addEventListener('input', (e) => updateOrangeColor(e.target.value)); // Updates variable AND border rects
+
+                document.getElementById('btn-use-green').addEventListener('click', () => setActiveColor('green'));
+                document.getElementById('btn-use-orange').addEventListener('click', () => setActiveColor('orange'));
+                document.getElementById('btn-use-white').addEventListener('click', () => setActiveColor('white'));
+                document.getElementById('btn-use-yellow').addEventListener('click', () => setActiveColor('yellow'));
+                document.getElementById('btn-random-letters').addEventListener('click', randomizeLetters);
+                document.getElementById('btn-reset-colors').addEventListener('click', resetInnerCellColors);
+                btnCelebrate.addEventListener('click', celebrate);
+            } catch(e) {
+                 console.error("Error setting up event listeners:", e);
+            }
+        }
+
+        // --- Initial Setup ---
+        document.addEventListener('DOMContentLoaded', () => {
+             try {
+                readCssColors(); setActiveColor('white'); // Default paint color
+                drawHexGrid(); // Draws bg rects and inner cells
+                if (cells.flat().filter(c => c !== null).length > 0) { randomizeLetters(); }
+                else { console.warn("Grid seems empty after initial draw."); }
+                setupEventListeners(); // Setup listeners after grid is drawn
+            } catch (error) {
+                 console.error("Error during initial setup:", error);
+                 document.getElementById('game-container').innerHTML = '<p class="text-red-400 text-center">حدث خطأ أثناء تحميل اللعبة. يرجى تحديث الصفحة.</p>';
+            }
+        });
+    </script>
+</body>
+</html>
+
